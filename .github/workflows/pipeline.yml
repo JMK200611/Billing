@@ -6,50 +6,39 @@ on:
       - main
 
 jobs:
-  ci-cd-pipeline:
+  build-test-deploy:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Check out repository code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r app/requirements.txt
+      - name: Install Dependencies & Run Tests
+        run: |
+          pip install -r requirements.txt
+          pytest
 
-    - name: Run automated tests
-      run: |
-        cd app
-        pytest test_billing.py
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and Push Docker Image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/shopping-bill-calculator:$IMAGE_TAG .
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/shopping-bill-calculator:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
-    - name: Build and Push Docker Image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./app
-        push: true
-        tags: |
-          ${{ secrets.DOCKERHUB_USERNAME }}/shopping-calculator:${{ github.sha }}
-          ${{ secrets.DOCKERHUB_USERNAME }}/shopping-calculator:latest
-
-    - name: Set up Kubeconfig
-      run: |
-        mkdir -p ~/.kube
-        echo "${{ secrets.KUBECONFIG_DATA }}" | base64 --decode > ~/.kube/config
-
-    - name: Deploy to Kubernetes
-      run: |
-        sed -i "s|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/shopping-calculator:${{ github.sha }}|g" k8s/deployment.yml
-        kubectl apply -f k8s/deployment.yml
-        kubectl apply -f k8s/service.yml
+      - name: Deploy to Kubernetes
+        run: |
+          sed -i "s|JMK200611/shopping-bill-calculator:latest|${{ secrets.DOCKERHUB_USERNAME }}/shopping-bill-calculator:${{ env.IMAGE_TAG }}|g" k8s/deployment.yaml
+          echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
+          export KUBECONFIG=kubeconfig.yaml
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml

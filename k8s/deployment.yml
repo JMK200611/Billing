@@ -1,23 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: shopping-calculator
+  name: shopping-bill-deployment
   labels:
-    app: shopping-calculator
+    app: shopping-bill
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: shopping-calculator
+      app: shopping-bill
   template:
     metadata:
       labels:
-        app: shopping-calculator
+        app: shopping-bill
     spec:
       containers:
-      - name: calculator
-        image: DOCKERHUB_USERNAME/shopping-calculator:placeholder
+      - name: shopping-bill-container
+        # The pipeline replaces this placeholder image tag dynamically on each push
+        image: JMK200611/shopping-bill-calculator:latest
         ports:
-        - containerPort: 80
-        stdin: true
-        tty: true
+        - containerPort: 8080
